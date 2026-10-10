@@ -1,22 +1,11 @@
 import { NextResponse } from "next/server";
 
-//  Lista de modelos en orden de preferencia (fallback automático)
-// Si el primero falla, prueba el siguiente, y así sucesivamente.
+// Lista de modelos en orden de preferencia para fallback automático
 const MODEL_FALLBACK = [
-  "gemini-2.0-flash",       // El más moderno y rápido (2025+)
-  "gemini-1.5-flash",       // Muy estable y rápido
-  "gemini-1.5-pro",         // Más potente, un poco más lento
-  "gemini-2.0-flash-lite",  // Último recurso, muy ligero
+  "gemini-1.5-flash", // El más estable y ampliamente disponible
+  "gemini-1.5-pro",   // Alternativa potente
+  "gemini-3.8-flash", // Modelo más nuevo recomendado por Google en el error 404
 ];
-
-// Cache de modelos que ya sabemos que NO funcionan (para no volver a probarlos)
-const failedModels = new Set<string>();
-
-/** Devuelve el siguiente modelo disponible que no haya fallado antes */
-function getNextModel(preferred?: string): string | null {
-  const list = preferred ? [preferred, ...MODEL_FALLBACK] : MODEL_FALLBACK;
-  return list.find((m) => !failedModels.has(m)) ?? null;
-}
 
 const apiUrl = (model: string) =>
   `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
@@ -67,29 +56,20 @@ function extractJSON(text: string): unknown {
   }
 }
 
-/**
- * Llama a la API de Google con fallback automático entre modelos.
- * Si el modelo preferido falla, prueba los siguientes de la lista.
- */
-export async function askJSON(
-  prompt: string,
-  preferredModel?: string,
-  maxTokens: number = 16000
-): Promise<unknown> {
+export async function askJSON(prompt: string, preferredModel?: string, maxTokens: number = 16000): Promise<unknown> {
   const key = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   if (!key) {
-    throw new HttpError(500, "Falta GOOGLE_API_KEY. Crea el archivo .env.local (mira .env.example).");
+    throw new HttpError(500, "Falta GOOGLE_API_KEY. Crea el archivo .env.local.");
   }
 
-  const tried: string[] = [];
+  // Si hay un modelo preferido, lo ponemos primero en la lista
+  const modelsToTry = preferredModel 
+    ? [preferredModel, ...MODEL_FALLBACK.filter(m => m !== preferredModel)]
+    : MODEL_FALLBACK;
+
   let lastError: HttpError | null = null;
 
-  // Intenta con cada modelo hasta que uno funcione
-  for (const model of MODEL_FALLBACK) {
-    if (failedModels.has(model)) continue;
-
-    tried.push(model);
-
+  for (const model of modelsToTry) {
     try {
       const res = await fetch(apiUrl(model), {
         method: "POST",
@@ -111,9 +91,8 @@ export async function askJSON(
         const detail = await res.text().catch(() => "");
         console.error(`[Modelo: ${model}] Google API error`, res.status, detail);
 
-        // Si el modelo NO existe o NO tenemos acceso, lo marcamos como fallido y probamos el siguiente
-        if (res.status === 404 || res.status === 403 || /API_KEY_INVALID|API key not valid|not available/i.test(detail)) {
-          failedModels.add(model);
+        // Si el modelo NO existe o NO tenemos acceso (404 o 403), probamos el siguiente
+        if (res.status === 404 || res.status === 403 || /API_KEY_INVALID|API key not valid|no longer available/i.test(detail)) {
           console.warn(`[Fallback] Modelo "${model}" no disponible. Probando siguiente...`);
           continue; // ⬅️ pasa al siguiente modelo
         }
@@ -142,12 +121,11 @@ export async function askJSON(
 
       if (!text.trim()) throw new HttpError(502, "La IA no devolvió respuesta. Inténtalo de nuevo.");
 
-      console.log(`[IA] Usando modelo: ${model} (intentos previos: ${tried.slice(0, -1).join(", ") || "ninguno"})`);
+      console.log(`[IA] Usando modelo: ${model} (éxito)`);
       return extractJSON(text);
     } catch (e) {
-      // Si es un HttpError que NO es de modelo no disponible, lo propagamos
       if (e instanceof HttpError && ![404, 403].includes(e.status)) {
-        throw e;
+        throw e; // Si es un error grave, no seguimos probando
       }
       lastError = e as HttpError;
     }
@@ -156,6 +134,6 @@ export async function askJSON(
   // Si llegamos aquí, todos los modelos fallaron
   throw new HttpError(
     500,
-    `Ningún modelo de IA está disponible (intentados: ${tried.join(", ")}). Revisa tu API Key o espera unos minutos.`
+    `Ningún modelo de IA está disponible (intentados: ${modelsToTry.join(", ")}). Revisa tu API Key.`
   );
 }

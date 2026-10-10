@@ -56,7 +56,9 @@ export async function POST(req: Request) {
       ? body.previous.map((p: unknown) => String(p).slice(0, 300)).slice(-40)
       : [];
 
-    const data = await askJSON(buildPrompt(topic, types, count, level, previous), undefined, 16000);
+    const preferredModel = process.env.GOOGLE_MODEL || undefined;
+    const data = await askJSON(buildPrompt(topic, types, count, level, previous), preferredModel, 16000);
+    
     const list = Array.isArray(data) ? data : (data as { questions?: unknown[] })?.questions;
     const questions = (Array.isArray(list) ? list : []).map(validateQuestion).filter(Boolean);
 

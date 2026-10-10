@@ -32,7 +32,8 @@ export async function POST(req: Request) {
       'Devuelve SOLO un objeto JSON: {"score": número entre 0 y 1 (1 totalmente correcta, 0.5 parcial, 0 incorrecta), "feedback": 1-3 frases dirigidas al estudiante (en español, tuteando) explicando qué está bien y qué falta o es erróneo}.',
     ].join("\n");
 
-    const r = (await askJSON(prompt, undefined, 2000)) as { score?: unknown; feedback?: unknown };
+    const preferredModel = process.env.GOOGLE_GRADE_MODEL || process.env.GOOGLE_MODEL || undefined;
+    const r = (await askJSON(prompt, preferredModel, 2000)) as { score?: unknown; feedback?: unknown };
 
     let s = Number(r?.score);
     if (Number.isNaN(s)) s = 0;
