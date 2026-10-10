@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-// "openrouter/free" elige automáticamente un modelo gratuito disponible.
-// OpenRouter se encarga del fallback si uno falla.
 const MODEL = "openrouter/free";
 
 export class HttpError extends Error {
