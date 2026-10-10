@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 
-// Lista de modelos en orden de preferencia. Si el primero falla (404/403), prueba el siguiente.
-const MODEL_FALLBACK = [
-  "gemini-1.5-flash", // El más estable y ampliamente disponible
-  "gemini-1.5-pro",   // Alternativa potente
-  "gemini-2.0-flash", // Modelo más nuevo
+// Lista de modelos que SÍ funcionan. Ignoramos variables de entorno antiguas.
+const MODELOS_DISPONIBLES = [
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+  "gemini-2.0-flash-exp"
 ];
 
 const apiUrl = (model: string) =>
@@ -55,20 +55,15 @@ function extractJSON(text: string): unknown {
   }
 }
 
-export async function askJSON(prompt: string, preferredModel?: string, maxTokens: number = 16000): Promise<unknown> {
+export async function askJSON(prompt: string, maxTokens: number = 16000): Promise<unknown> {
   const key = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   if (!key) {
-    throw new HttpError(500, "Falta GOOGLE_API_KEY. Crea el archivo .env.local.");
+    throw new HttpError(500, "Falta GOOGLE_API_KEY. Revisa las variables de entorno en Vercel.");
   }
-
-  // Si hay un modelo preferido, lo ponemos primero. Si no, usamos la lista por defecto.
-  const modelsToTry = preferredModel 
-    ? [preferredModel, ...MODEL_FALLBACK.filter(m => m !== preferredModel)]
-    : MODEL_FALLBACK;
 
   let lastError: HttpError | null = null;
 
-  for (const model of modelsToTry) {
+  for (const model of MODELOS_DISPONIBLES) {
     try {
       const res = await fetch(apiUrl(model), {
         method: "POST",
@@ -90,19 +85,17 @@ export async function askJSON(prompt: string, preferredModel?: string, maxTokens
         const detail = await res.text().catch(() => "");
         console.error(`[Modelo: ${model}] Google API error`, res.status, detail);
 
-        // Si el modelo NO existe o NO tenemos acceso (404 o 403), probamos el siguiente
+        // Si el modelo no existe o no tenemos acceso, probamos el siguiente
         if (res.status === 404 || res.status === 403 || /API_KEY_INVALID|API key not valid|no longer available/i.test(detail)) {
           console.warn(`[Fallback] Modelo "${model}" no disponible. Probando siguiente...`);
-          continue; // ⬅️ pasa al siguiente modelo
+          continue;
         }
 
-        // Otros errores (429, 500...) los propagamos directamente
         if (res.status === 429) throw new HttpError(429, "Límite de uso alcanzado. Espera un poco y reintenta.");
         if (res.status === 401) throw new HttpError(500, "La clave de API de Google no es válida.");
         throw new HttpError(502, "Error al hablar con la IA. Inténtalo de nuevo.");
       }
 
-      // ✅ Éxito: parseamos la respuesta
       const data = (await res.json()) as {
         candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
         promptFeedback?: { blockReason?: string };
@@ -120,19 +113,18 @@ export async function askJSON(prompt: string, preferredModel?: string, maxTokens
 
       if (!text.trim()) throw new HttpError(502, "La IA no devolvió respuesta. Inténtalo de nuevo.");
 
-      console.log(`[IA] Usando modelo: ${model} (éxito)`);
+      console.log(`[IA] Éxito usando modelo: ${model}`);
       return extractJSON(text);
     } catch (e) {
       if (e instanceof HttpError && ![404, 403].includes(e.status)) {
-        throw e; // Si es un error grave, no seguimos probando
+        throw e;
       }
       lastError = e as HttpError;
     }
   }
 
-  // Si llegamos aquí, todos los modelos fallaron
   throw new HttpError(
     500,
-    `Ningún modelo de IA está disponible (intentados: ${modelsToTry.join(", ")}). Revisa tu API Key.`
+    `Ningún modelo de IA está disponible. Revisa tu API Key en Vercel.`
   );
 }
