@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 
-// Lista de modelos en orden de preferencia para fallback automático
+// Lista de modelos en orden de preferencia. Si el primero falla (404/403), prueba el siguiente.
 const MODEL_FALLBACK = [
   "gemini-1.5-flash", // El más estable y ampliamente disponible
   "gemini-1.5-pro",   // Alternativa potente
-  "gemini-3.8-flash", // Modelo más nuevo recomendado por Google en el error 404
+  "gemini-2.0-flash", // Modelo más nuevo
 ];
 
 const apiUrl = (model: string) =>
@@ -26,13 +26,12 @@ export function errorResponse(e: unknown) {
   return NextResponse.json({ error: "Error interno del servidor." }, { status: 500 });
 }
 
-/** Extrae el primer array/objeto JSON de un texto (tolera ```json ... ```) */
 function extractJSON(text: string): unknown {
   const clean = text.replace(/```json|```/gi, "").trim();
   try {
     return JSON.parse(clean);
   } catch {
-    /* sigue */
+    // sigue
   }
   const firstArr = clean.indexOf("[");
   const firstObj = clean.indexOf("{");
@@ -62,7 +61,7 @@ export async function askJSON(prompt: string, preferredModel?: string, maxTokens
     throw new HttpError(500, "Falta GOOGLE_API_KEY. Crea el archivo .env.local.");
   }
 
-  // Si hay un modelo preferido, lo ponemos primero en la lista
+  // Si hay un modelo preferido, lo ponemos primero. Si no, usamos la lista por defecto.
   const modelsToTry = preferredModel 
     ? [preferredModel, ...MODEL_FALLBACK.filter(m => m !== preferredModel)]
     : MODEL_FALLBACK;

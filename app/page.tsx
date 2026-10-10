@@ -68,7 +68,6 @@ export default function Page() {
   const ctl = useRef<AbortController | null>(null);
   const previous = useRef<string[]>([]);
 
-  /* Recordar el texto entre recargas */
   useEffect(() => {
     try {
       const saved = localStorage.getItem("estudia_topic");
@@ -187,11 +186,9 @@ export default function Page() {
     goTo("setup");
   }
 
-  /* ---------- render ---------- */
   const q = questions[idx];
   const r = results[idx];
-  const canCheck =
-    !grading && selected !== null && !(typeof selected === "string" && !selected.trim());
+  const canCheck = !grading && selected !== null && !(typeof selected === "string" && !selected.trim());
   const total = results.reduce((a, x) => a + (x?.score ?? 0), 0);
   const pct = questions.length ? Math.round((total / questions.length) * 100) : 0;
   const finalMsg =
@@ -216,7 +213,6 @@ export default function Page() {
         )}
       </header>
 
-      {/* PANTALLA 1: configuración */}
       {screen === "setup" && (
         <section>
           <div className="card">
@@ -284,7 +280,6 @@ export default function Page() {
         </section>
       )}
 
-      {/* PANTALLA 2: cargando */}
       {screen === "loading" && (
         <section>
           <div className="card loading">
@@ -299,7 +294,6 @@ export default function Page() {
         </section>
       )}
 
-      {/* PANTALLA 3: cuestionario */}
       {screen === "quiz" && q && (
         <section>
           <div className="progress">
@@ -313,7 +307,7 @@ export default function Page() {
               <span className="tag">{TYPE_LABEL[q.type]}</span>
             </div>
             <p className="q">{q.question}</p>
-            {/* Respuesta */}
+            
             {q.type === "test" &&
               q.options!.map((o, i) => {
                 let cls = "opt";
@@ -328,6 +322,7 @@ export default function Page() {
                   </button>
                 );
               })}
+              
             {q.type === "vf" &&
               [true, false].map((val) => {
                 let cls = "opt";
@@ -342,6 +337,7 @@ export default function Page() {
                   </button>
                 );
               })}
+              
             {q.type === "corta" && (
               <input
                 type="text"
@@ -353,6 +349,7 @@ export default function Page() {
                 onKeyDown={(e) => e.key === "Enter" && canCheck && check()}
               />
             )}
+            
             {q.type === "abierta" && (
               <textarea
                 rows={6}
@@ -362,7 +359,7 @@ export default function Page() {
                 onChange={(e) => setSelected(e.target.value)}
               />
             )}
-            {/* Corrección */}
+            
             {checked && r && (() => {
               const v = verdictOf(r.score);
               const manual = q.type === "corta" || q.type === "abierta";
@@ -396,6 +393,7 @@ export default function Page() {
                 </div>
               );
             })()}
+            
             <div className="actions">
               {!checked ? (
                 <button className="btn" disabled={!canCheck} onClick={check}>
@@ -412,7 +410,6 @@ export default function Page() {
         </section>
       )}
 
-      {/* PANTALLA 4: resultados */}
       {screen === "results" && (
         <section>
           <div className="card" style={{ textAlign: "center" }}>
