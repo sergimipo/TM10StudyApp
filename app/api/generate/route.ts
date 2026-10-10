@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { askJSON, errorResponse, GEN_MODEL, HttpError } from "@/lib/ai";
+import { askJSON, errorResponse, HttpError } from "@/lib/ai";
 import { validateQuestion } from "@/lib/validate";
 import { ALL_TYPES, MAX_CHARS, type QType } from "@/lib/types";
 
@@ -51,13 +51,15 @@ export async function POST(req: Request) {
 
     const count = Math.max(1, Math.min(20, Number(body.count) || 8));
     const level = ["fácil", "media", "difícil"].includes(body.level) ? body.level : "media";
+
     const previous: string[] = Array.isArray(body.previous)
       ? body.previous.map((p: unknown) => String(p).slice(0, 300)).slice(-40)
       : [];
 
-    const data = await askJSON(buildPrompt(topic, types, count, level, previous), GEN_MODEL, 16000);
+    const data = await askJSON(buildPrompt(topic, types, count, level, previous), undefined, 16000);
     const list = Array.isArray(data) ? data : (data as { questions?: unknown[] })?.questions;
     const questions = (Array.isArray(list) ? list : []).map(validateQuestion).filter(Boolean);
+
     if (!questions.length) throw new HttpError(502, "La IA no devolvió preguntas válidas. Inténtalo de nuevo.");
 
     return NextResponse.json({ questions });

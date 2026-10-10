@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { askJSON, errorResponse, GRADE_MODEL, HttpError } from "@/lib/ai";
+import { askJSON, errorResponse, HttpError } from "@/lib/ai";
 
 export const maxDuration = 30;
 
@@ -11,9 +11,11 @@ export async function POST(req: Request) {
     const question = String(body.question ?? "").slice(0, 2000);
     const modelAnswer = String(body.answer ?? "").slice(0, 4000);
     const userAnswer = String(body.userAnswer ?? "").trim().slice(0, 6000);
+
     const keyPoints: string[] = Array.isArray(body.keyPoints)
       ? body.keyPoints.map((k: unknown) => String(k).slice(0, 300)).slice(0, 10)
       : [];
+
     if (!question || !modelAnswer || !userAnswer) throw new HttpError(400, "Faltan datos.");
 
     const prompt = [
@@ -30,10 +32,12 @@ export async function POST(req: Request) {
       'Devuelve SOLO un objeto JSON: {"score": número entre 0 y 1 (1 totalmente correcta, 0.5 parcial, 0 incorrecta), "feedback": 1-3 frases dirigidas al estudiante (en español, tuteando) explicando qué está bien y qué falta o es erróneo}.',
     ].join("\n");
 
-    const r = (await askJSON(prompt, GRADE_MODEL, 2000)) as { score?: unknown; feedback?: unknown };
+    const r = (await askJSON(prompt, undefined, 2000)) as { score?: unknown; feedback?: unknown };
+
     let s = Number(r?.score);
     if (Number.isNaN(s)) s = 0;
     s = Math.max(0, Math.min(1, s));
+
     // Cuantizamos a 1 / 0.5 / 0 para simplificar la nota final
     const score = s >= 0.75 ? 1 : s >= 0.35 ? 0.5 : 0;
 
