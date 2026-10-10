@@ -13,6 +13,7 @@ import {
 type Screen = "setup" | "loading" | "quiz" | "grading" | "results";
 type Answer = number | boolean | string | null;
 
+// SIN ESPACIOS RAROS
 const TYPE_CHIPS: { type: QType; label: string }[] = [
   { type: "test", label: "Tipo test" },
   { type: "vf", label: "Verdadero / Falso" },
@@ -185,6 +186,7 @@ export default function Page() {
     const q = questions[idx];
     if (checked || selected === null) return;
 
+    // AQUÍ ESTÁ LA CLAVE: al no tener espacios, "test" y "vf" se detectan perfectamente
     if (q.type === "test" || q.type === "vf") {
       const user =
         q.type === "test"
