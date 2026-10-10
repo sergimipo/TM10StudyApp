@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-// Modelo gratuito a través de OpenRouter
-// Si da error 404, prueba a cambiarlo por: "google/gemma-3-1b-it:free"
-const MODEL = "google/gemma-4-31b-it:free"; 
+// "openrouter/free" elige automáticamente un modelo gratuito disponible.
+// OpenRouter se encarga del fallback si uno falla.
+const MODEL = "openrouter/free";
 
 export class HttpError extends Error {
   status: number;
@@ -59,7 +59,7 @@ export async function askJSON(prompt: string, maxTokens: number = 16000): Promis
     method: "POST",
     headers: {
       "Authorization": `Bearer ${key}`,
-      "HTTP-Referer": "https://tm-10-study-app.vercel.app", // Requerido por OpenRouter
+      "HTTP-Referer": "https://tm-10-study-app.vercel.app",
       "X-Title": "TM10 Study App",
       "Content-Type": "application/json",
     },
@@ -80,9 +80,6 @@ export async function askJSON(prompt: string, maxTokens: number = 16000): Promis
     }
     if (res.status === 429) {
       throw new HttpError(429, "Límite de uso alcanzado. Espera un momento.");
-    }
-    if (res.status === 404) {
-      throw new HttpError(500, `El modelo "${MODEL}" no existe en OpenRouter. Revisa el ID exacto en openrouter.ai/models`);
     }
     throw new HttpError(502, "Error al hablar con la IA. Inténtalo de nuevo.");
   }
