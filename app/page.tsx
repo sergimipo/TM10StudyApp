@@ -10,7 +10,7 @@ import {
   type Result,
 } from "@/lib/types";
 
-type Screen = "setup" | "loading" | "quiz" | "results";
+type Screen = "setup" | "loading" | "quiz" | "grading" | "results";
 type Answer = number | boolean | string | null;
 
 const TYPE_CHIPS: { type: QType; label: string }[] = [
@@ -59,14 +59,16 @@ export default function Page() {
   const [level, setLevel] = useState<Level>("media");
   const [count, setCount] = useState(8);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [results, setResults] = useState<Result[]>([]);
+  const [results, setResults] = useState<(Result | null)[]>([]);
   const [idx, setIdx] = useState(0);
   const [selected, setSelected] = useState<Answer>(null);
   const [checked, setChecked] = useState(false);
-  const [grading, setGrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+
   const ctl = useRef<AbortController | null>(null);
   const previous = useRef<string[]>([]);
+  const pendingRef = useRef(0); // Ref para trackear pendientes sin problemas de closure
 
   useEffect(() => {
     try {
@@ -115,10 +117,12 @@ export default function Page() {
       );
       previous.current.push(...data.questions.map((q) => q.question));
       setQuestions(data.questions);
-      setResults([]);
+      setResults(new Array(data.questions.length).fill(null));
       setIdx(0);
       setSelected(null);
       setChecked(false);
+      setPendingCount(0);
+      pendingRef.current = 0;
       goTo("quiz");
     } catch (e) {
       goTo("setup");
@@ -126,18 +130,65 @@ export default function Page() {
     }
   }
 
-  function finish(r: Result) {
+  // Marca el resultado de una pregunta (síncrono o asíncrono)
+  function markResult(i: number, r: Result) {
     setResults((prev) => {
       const n = [...prev];
-      n[idx] = r;
+      n[i] = r;
       return n;
     });
-    setChecked(true);
+  }
+
+  // Lanza la corrección en segundo plano
+  function gradeInBackground(qIndex: number, userAnswer: string, q: Question) {
+    pendingRef.current += 1;
+    setPendingCount(pendingRef.current);
+
+    // Marcamos como pendiente inmediatamente para que se vea en resultados
+    markResult(qIndex, {
+      score: -1,
+      user: userAnswer,
+      correct: String(q.answer),
+      feedback: "Corrigiendo...",
+    });
+
+    const c = new AbortController();
+    ctl.current = c;
+
+    postJSON<{ score: number; feedback: string }>(
+      "/api/grade",
+      { question: q.question, answer: q.answer, keyPoints: q.keyPoints, userAnswer },
+      c.signal
+    )
+      .then((data) => {
+        markResult(qIndex, {
+          score: data.score,
+          user: userAnswer,
+          correct: String(q.answer),
+          feedback: data.feedback,
+        });
+      })
+      .catch((e) => {
+        if ((e as Error).name !== "AbortError") {
+          markResult(qIndex, {
+            score: 0,
+            user: userAnswer,
+            correct: String(q.answer),
+            feedback: "Error al corregir. Inténtalo de nuevo.",
+          });
+        }
+      })
+      .finally(() => {
+        pendingRef.current -= 1;
+        setPendingCount(pendingRef.current);
+      });
   }
 
   async function check() {
     const q = questions[idx];
     if (checked || selected === null) return;
+
+    // Test y V/F: corrección instantánea (síncrona)
     if (q.type === "test" || q.type === "vf") {
       const user =
         q.type === "test"
@@ -145,27 +196,27 @@ export default function Page() {
           : selected
           ? "Verdadero"
           : "Falso";
-      finish({ score: selected === q.answer ? 1 : 0, user, correct: correctText(q) });
+      markResult(idx, { score: selected === q.answer ? 1 : 0, user, correct: correctText(q) });
+      setChecked(true);
       return;
     }
+
+    // Corta / Abierta: avanzamos inmediatamente y corregimos en background
     const userAnswer = String(selected).trim();
     if (!userAnswer) return;
-    setGrading(true);
-    setError(null);
-    const c = new AbortController();
-    ctl.current = c;
-    try {
-      const data = await postJSON<{ score: number; feedback: string }>(
-        "/api/grade",
-        { question: q.question, answer: q.answer, keyPoints: q.keyPoints, userAnswer },
-        c.signal
-      );
-      finish({ score: data.score, user: userAnswer, correct: String(q.answer), feedback: data.feedback });
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") setError((e as Error).message);
-    } finally {
-      setGrading(false);
-    }
+
+    markResult(idx, {
+      score: -1,
+      user: userAnswer,
+      correct: String(q.answer),
+      feedback: "Corrigiendo...",
+    });
+
+    // Avanzamos inmediatamente
+    setChecked(true);
+
+    // Lanzamos la corrección en background
+    gradeInBackground(idx, userAnswer, q);
   }
 
   function next() {
@@ -175,21 +226,38 @@ export default function Page() {
       setSelected(null);
       setChecked(false);
     } else {
-      goTo("results");
+      // Si hay correcciones pendientes, vamos a la pantalla de "Corrigiendo..."
+      if (pendingRef.current > 0) {
+        goTo("grading");
+      } else {
+        goTo("results");
+      }
     }
   }
+
+  // Efecto: cuando todas las correcciones terminen, pasar a resultados
+  useEffect(() => {
+    if (screen === "grading" && pendingCount === 0 && questions.length > 0) {
+      // Pequeño delay para que se vea la transición
+      const t = setTimeout(() => goTo("results"), 400);
+      return () => clearTimeout(t);
+    }
+  }, [screen, pendingCount, questions.length]);
 
   function newTopic() {
     ctl.current?.abort();
     previous.current = [];
     setError(null);
+    setPendingCount(0);
+    pendingRef.current = 0;
     goTo("setup");
   }
 
   const q = questions[idx];
   const r = results[idx];
-  const canCheck = !grading && selected !== null && !(typeof selected === "string" && !selected.trim());
-  const total = results.reduce((a, x) => a + (x?.score ?? 0), 0);
+  const canCheck = !selected === null && !(typeof selected === "string" && !String(selected).trim());
+  const total = results.reduce((a, x) => a + (x && x.score >= 0 ? x.score : 0), 0);
+  const answeredCount = results.filter((x) => x !== null).length;
   const pct = questions.length ? Math.round((total / questions.length) * 100) : 0;
   const finalMsg =
     pct >= 90
@@ -213,6 +281,7 @@ export default function Page() {
         )}
       </header>
 
+      {/* PANTALLA 1: configuración */}
       {screen === "setup" && (
         <section>
           <div className="card">
@@ -280,6 +349,7 @@ export default function Page() {
         </section>
       )}
 
+      {/* PANTALLA 2: cargando */}
       {screen === "loading" && (
         <section>
           <div className="card loading">
@@ -294,10 +364,11 @@ export default function Page() {
         </section>
       )}
 
+      {/* PANTALLA 3: cuestionario */}
       {screen === "quiz" && q && (
         <section>
           <div className="progress">
-            <div style={{ width: `${(idx / questions.length) * 100}%` }} />
+            <div style={{ width: `${((idx + 1) / questions.length) * 100}%` }} />
           </div>
           <div className="card" key={idx}>
             <div className="meta">
@@ -307,7 +378,7 @@ export default function Page() {
               <span className="tag">{TYPE_LABEL[q.type]}</span>
             </div>
             <p className="q">{q.question}</p>
-            
+
             {q.type === "test" &&
               q.options!.map((o, i) => {
                 let cls = "opt";
@@ -322,7 +393,7 @@ export default function Page() {
                   </button>
                 );
               })}
-              
+
             {q.type === "vf" &&
               [true, false].map((val) => {
                 let cls = "opt";
@@ -337,51 +408,39 @@ export default function Page() {
                   </button>
                 );
               })}
-              
+
             {q.type === "corta" && (
               <input
                 type="text"
                 placeholder="Tu respuesta…"
                 autoComplete="off"
-                disabled={checked || grading}
+                disabled={checked}
                 value={typeof selected === "string" ? selected : ""}
                 onChange={(e) => setSelected(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && canCheck && check()}
               />
             )}
-            
+
             {q.type === "abierta" && (
               <textarea
                 rows={6}
                 placeholder="Desarrolla tu respuesta…"
-                disabled={checked || grading}
+                disabled={checked}
                 value={typeof selected === "string" ? selected : ""}
                 onChange={(e) => setSelected(e.target.value)}
               />
             )}
-            
-            {checked && r && (() => {
+
+            {/* Feedback inmediato solo para test/vf */}
+            {checked && r && (q.type === "test" || q.type === "vf") && (() => {
               const v = verdictOf(r.score);
-              const manual = q.type === "corta" || q.type === "abierta";
               return (
                 <div className={`feedback ${v.cls}`}>
                   <div className="verdict">{v.text}</div>
-                  {manual && r.feedback && (
-                    <p>
-                      <span className="lab">Corrección: </span>
-                      {r.feedback}
-                    </p>
-                  )}
-                  {(manual || r.score < 1) && (
+                  {r.score < 1 && (
                     <p>
                       <span className="lab">Respuesta correcta: </span>
                       {r.correct}
-                    </p>
-                  )}
-                  {q.type === "abierta" && !!q.keyPoints?.length && (
-                    <p>
-                      <span className="lab">Ideas clave: </span>
-                      {q.keyPoints.join(" · ")}
                     </p>
                   )}
                   {q.explanation && (
@@ -393,11 +452,19 @@ export default function Page() {
                 </div>
               );
             })()}
-            
+
+            {/* Indicador de corrección en background para corta/abierta */}
+            {checked && q.type !== "test" && q.type !== "vf" && (
+              <div className="feedback mid">
+                <div className="verdict">✓ Respuesta registrada</div>
+                <p className="muted">La IA está corrigiendo en segundo plano. Sigue con la siguiente pregunta.</p>
+              </div>
+            )}
+
             <div className="actions">
               {!checked ? (
                 <button className="btn" disabled={!canCheck} onClick={check}>
-                  {grading ? "Corrigiendo…" : "Comprobar"}
+                  Comprobar
                 </button>
               ) : (
                 <button className="btn" onClick={next}>
@@ -410,6 +477,22 @@ export default function Page() {
         </section>
       )}
 
+      {/* PANTALLA 3.5: corrigiendo respuestas en background */}
+      {screen === "grading" && (
+        <section>
+          <div className="card loading">
+            <div className="spinner" />
+            <div style={{ fontSize: "18px", fontWeight: 600, marginBottom: "8px" }}>
+              Corrigiendo respuestas…
+            </div>
+            <div className="muted">
+              {pendingCount} {pendingCount === 1 ? "respuesta pendiente" : "respuestas pendientes"}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* PANTALLA 4: resultados */}
       {screen === "results" && (
         <section>
           <div className="card" style={{ textAlign: "center" }}>
@@ -431,8 +514,10 @@ export default function Page() {
           <div className="card">
             <h2>Repaso</h2>
             {questions.map((qq, i) => {
-              const rr = results[i] ?? { score: 0, user: "", correct: correctText(qq) };
-              const v = verdictOf(rr.score);
+              const rr = results[i];
+              if (!rr) return null;
+              const isPending = rr.score === -1;
+              const v = isPending ? { cls: "mid", label: "Pendiente" } : verdictOf(rr.score);
               return (
                 <div className="review-item" key={i}>
                   <div className={`st ${v.cls}`}>
@@ -440,8 +525,8 @@ export default function Page() {
                   </div>
                   <p className="qq">{qq.question}</p>
                   <p>Tu respuesta: {rr.user || "—"}</p>
-                  {rr.score < 1 && <p>Correcta: {rr.correct}</p>}
-                  {rr.feedback && <p className="muted">{rr.feedback}</p>}
+                  {!isPending && rr.score < 1 && <p>Correcta: {rr.correct}</p>}
+                  {rr.feedback && rr.feedback !== "Corrigiendo..." && <p className="muted">{rr.feedback}</p>}
                 </div>
               );
             })}
