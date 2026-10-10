@@ -1,4 +1,4 @@
-# Estudia con IA (Next.js)
+# TM10 INS Mollet (Next.js)
 
 Pega un tema y practica con preguntas tipo test, verdadero/falso, respuesta corta y respuesta abierta.
 La IA genera las preguntas y corrige las respuestas, y siempre te muestra la solución.

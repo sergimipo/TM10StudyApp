@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Estudia con IA",
+  title: "TM10 INS Mollet",
   description: "Pega tu tema y practica con preguntas generadas y corregidas por IA.",
 };
 

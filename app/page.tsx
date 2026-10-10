@@ -68,7 +68,7 @@ export default function Page() {
 
   const ctl = useRef<AbortController | null>(null);
   const previous = useRef<string[]>([]);
-  const pendingRef = useRef(0); // Ref para trackear pendientes sin problemas de closure
+  const pendingRef = useRef(0);
 
   useEffect(() => {
     try {
@@ -130,7 +130,6 @@ export default function Page() {
     }
   }
 
-  // Marca el resultado de una pregunta (síncrono o asíncrono)
   function markResult(i: number, r: Result) {
     setResults((prev) => {
       const n = [...prev];
@@ -139,12 +138,10 @@ export default function Page() {
     });
   }
 
-  // Lanza la corrección en segundo plano
   function gradeInBackground(qIndex: number, userAnswer: string, q: Question) {
     pendingRef.current += 1;
     setPendingCount(pendingRef.current);
 
-    // Marcamos como pendiente inmediatamente para que se vea en resultados
     markResult(qIndex, {
       score: -1,
       user: userAnswer,
@@ -188,7 +185,6 @@ export default function Page() {
     const q = questions[idx];
     if (checked || selected === null) return;
 
-    // Test y V/F: corrección instantánea (síncrona)
     if (q.type === "test" || q.type === "vf") {
       const user =
         q.type === "test"
@@ -201,7 +197,6 @@ export default function Page() {
       return;
     }
 
-    // Corta / Abierta: avanzamos inmediatamente y corregimos en background
     const userAnswer = String(selected).trim();
     if (!userAnswer) return;
 
@@ -212,10 +207,7 @@ export default function Page() {
       feedback: "Corrigiendo...",
     });
 
-    // Avanzamos inmediatamente
     setChecked(true);
-
-    // Lanzamos la corrección en background
     gradeInBackground(idx, userAnswer, q);
   }
 
@@ -226,7 +218,6 @@ export default function Page() {
       setSelected(null);
       setChecked(false);
     } else {
-      // Si hay correcciones pendientes, vamos a la pantalla de "Corrigiendo..."
       if (pendingRef.current > 0) {
         goTo("grading");
       } else {
@@ -235,10 +226,8 @@ export default function Page() {
     }
   }
 
-  // Efecto: cuando todas las correcciones terminen, pasar a resultados
   useEffect(() => {
     if (screen === "grading" && pendingCount === 0 && questions.length > 0) {
-      // Pequeño delay para que se vea la transición
       const t = setTimeout(() => goTo("results"), 400);
       return () => clearTimeout(t);
     }
@@ -255,9 +244,8 @@ export default function Page() {
 
   const q = questions[idx];
   const r = results[idx];
-  const canCheck = !selected === null && !(typeof selected === "string" && !String(selected).trim());
+  const canCheck = selected !== null && !(typeof selected === "string" && !String(selected).trim());
   const total = results.reduce((a, x) => a + (x && x.score >= 0 ? x.score : 0), 0);
-  const answeredCount = results.filter((x) => x !== null).length;
   const pct = questions.length ? Math.round((total / questions.length) * 100) : 0;
   const finalMsg =
     pct >= 90
@@ -281,7 +269,6 @@ export default function Page() {
         )}
       </header>
 
-      {/* PANTALLA 1: configuración */}
       {screen === "setup" && (
         <section>
           <div className="card">
@@ -349,7 +336,6 @@ export default function Page() {
         </section>
       )}
 
-      {/* PANTALLA 2: cargando */}
       {screen === "loading" && (
         <section>
           <div className="card loading">
@@ -364,7 +350,6 @@ export default function Page() {
         </section>
       )}
 
-      {/* PANTALLA 3: cuestionario */}
       {screen === "quiz" && q && (
         <section>
           <div className="progress">
@@ -431,7 +416,6 @@ export default function Page() {
               />
             )}
 
-            {/* Feedback inmediato solo para test/vf */}
             {checked && r && (q.type === "test" || q.type === "vf") && (() => {
               const v = verdictOf(r.score);
               return (
@@ -453,7 +437,6 @@ export default function Page() {
               );
             })()}
 
-            {/* Indicador de corrección en background para corta/abierta */}
             {checked && q.type !== "test" && q.type !== "vf" && (
               <div className="feedback mid">
                 <div className="verdict">✓ Respuesta registrada</div>
@@ -477,7 +460,6 @@ export default function Page() {
         </section>
       )}
 
-      {/* PANTALLA 3.5: corrigiendo respuestas en background */}
       {screen === "grading" && (
         <section>
           <div className="card loading">
@@ -492,7 +474,6 @@ export default function Page() {
         </section>
       )}
 
-      {/* PANTALLA 4: resultados */}
       {screen === "results" && (
         <section>
           <div className="card" style={{ textAlign: "center" }}>
