@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
 import {
   ALL_TYPES,
@@ -20,6 +19,7 @@ const TYPE_CHIPS: { type: QType; label: string }[] = [
   { type: "corta", label: "Respuesta corta" },
   { type: "abierta", label: "Respuesta abierta" },
 ];
+
 const LEVELS: { value: Level; label: string }[] = [
   { value: "fácil", label: "Fácil" },
   { value: "media", label: "Media" },
@@ -58,7 +58,6 @@ export default function Page() {
   const [types, setTypes] = useState<QType[]>(ALL_TYPES);
   const [level, setLevel] = useState<Level>("media");
   const [count, setCount] = useState(8);
-
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<Result[]>([]);
   const [idx, setIdx] = useState(0);
@@ -66,7 +65,6 @@ export default function Page() {
   const [checked, setChecked] = useState(false);
   const [grading, setGrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const ctl = useRef<AbortController | null>(null);
   const previous = useRef<string[]>([]);
 
@@ -77,6 +75,7 @@ export default function Page() {
       if (saved) setTopic(saved);
     } catch {}
   }, []);
+
   useEffect(() => {
     try {
       localStorage.setItem("estudia_topic", topic);
@@ -140,7 +139,6 @@ export default function Page() {
   async function check() {
     const q = questions[idx];
     if (checked || selected === null) return;
-
     if (q.type === "test" || q.type === "vf") {
       const user =
         q.type === "test"
@@ -151,7 +149,6 @@ export default function Page() {
       finish({ score: selected === q.answer ? 1 : 0, user, correct: correctText(q) });
       return;
     }
-
     const userAnswer = String(selected).trim();
     if (!userAnswer) return;
     setGrading(true);
@@ -193,10 +190,8 @@ export default function Page() {
   /* ---------- render ---------- */
   const q = questions[idx];
   const r = results[idx];
-
   const canCheck =
     !grading && selected !== null && !(typeof selected === "string" && !selected.trim());
-
   const total = results.reduce((a, x) => a + (x?.score ?? 0), 0);
   const pct = questions.length ? Math.round((total / questions.length) * 100) : 0;
   const finalMsg =
@@ -241,7 +236,6 @@ export default function Page() {
               {topic.length > MAX_CHARS && ` (se usarán los primeros ${MAX_CHARS.toLocaleString("es-ES")})`}
             </div>
           </div>
-
           <div className="card">
             <span className="lbl">Tipo de preguntas</span>
             <div className="chips">
@@ -260,7 +254,6 @@ export default function Page() {
               ))}
             </div>
             <p className="hint mt10">Pulsa uno para elegir solo ese; pulsa más para combinarlos.</p>
-
             <label className="lbl mt14" htmlFor="count">
               Número de preguntas
             </label>
@@ -275,7 +268,6 @@ export default function Page() {
               />
               <span className="num">{count}</span>
             </div>
-
             <span className="lbl mt18">Dificultad</span>
             <div className="chips">
               {LEVELS.map((l) => (
@@ -285,7 +277,6 @@ export default function Page() {
               ))}
             </div>
           </div>
-
           <button className="btn full" onClick={generate}>
             Generar preguntas
           </button>
@@ -322,7 +313,6 @@ export default function Page() {
               <span className="tag">{TYPE_LABEL[q.type]}</span>
             </div>
             <p className="q">{q.question}</p>
-
             {/* Respuesta */}
             {q.type === "test" &&
               q.options!.map((o, i) => {
@@ -338,7 +328,6 @@ export default function Page() {
                   </button>
                 );
               })}
-
             {q.type === "vf" &&
               [true, false].map((val) => {
                 let cls = "opt";
@@ -353,7 +342,6 @@ export default function Page() {
                   </button>
                 );
               })}
-
             {q.type === "corta" && (
               <input
                 type="text"
@@ -365,7 +353,6 @@ export default function Page() {
                 onKeyDown={(e) => e.key === "Enter" && canCheck && check()}
               />
             )}
-
             {q.type === "abierta" && (
               <textarea
                 rows={6}
@@ -375,7 +362,6 @@ export default function Page() {
                 onChange={(e) => setSelected(e.target.value)}
               />
             )}
-
             {/* Corrección */}
             {checked && r && (() => {
               const v = verdictOf(r.score);
@@ -410,7 +396,6 @@ export default function Page() {
                 </div>
               );
             })()}
-
             <div className="actions">
               {!checked ? (
                 <button className="btn" disabled={!canCheck} onClick={check}>
@@ -446,7 +431,6 @@ export default function Page() {
               </button>
             </div>
           </div>
-
           <div className="card">
             <h2>Repaso</h2>
             {questions.map((qq, i) => {
