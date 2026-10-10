@@ -56,7 +56,7 @@ export async function POST(req: Request) {
       ? body.previous.map((p: unknown) => String(p).slice(0, 300)).slice(-40)
       : [];
 
-    // CAMBIO: ya no pasamos el modelo, askJSON lo maneja internamente
+    // askJSON ahora maneja el modelo internamente
     const data = await askJSON(buildPrompt(topic, types, count, level, previous), 16000);
     
     const list = Array.isArray(data) ? data : (data as { questions?: unknown[] })?.questions;

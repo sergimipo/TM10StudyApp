@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 
-// Lista de modelos que SÍ funcionan. Ignoramos variables de entorno antiguas.
+// Modelos que SÍ son gratuitos y están disponibles actualmente
 const MODELOS_DISPONIBLES = [
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
-  "gemini-2.0-flash-exp"
+  "gemini-1.5-flash",      // El más estable y ampliamente disponible en capa gratuita
+  "gemini-3.8-flash",      // El Flash más reciente disponible en capa gratuita
+  "gemini-3.5-flash-lite", // Alternativa ligera gratuita
+  "gemini-1.5-pro"         // Como último recurso
 ];
 
 const apiUrl = (model: string) =>

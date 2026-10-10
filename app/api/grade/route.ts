@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       'Devuelve SOLO un objeto JSON: {"score": número entre 0 y 1 (1 totalmente correcta, 0.5 parcial, 0 incorrecta), "feedback": 1-3 frases dirigidas al estudiante (en español, tuteando) explicando qué está bien y qué falta o es erróneo}.',
     ].join("\n");
 
-    // CAMBIO: ya no pasamos el modelo, askJSON lo maneja internamente
+    // askJSON ahora maneja el modelo internamente
     const r = (await askJSON(prompt, 2000)) as { score?: unknown; feedback?: unknown };
 
     let s = Number(r?.score);
