@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server";
 
-// Modelos gratuitos y disponibles en 2026 (ordenados por preferencia)
-const MODELOS_DISPONIBLES = [
-  "gemini-3.8-flash",      // El más reciente, estable y recomendado por Google
-  "gemini-3.5-flash-lite", // Alternativa ligera y rápida
-  "gemini-3.1-flash-lite", // Otra opción ligera gratuita
-  "gemini-2.5-flash"       // Último recurso
-];
-
-const apiUrl = (model: string) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+// Modelo gratuito a través de OpenRouter
+// Si da error 404, prueba a cambiarlo por: "google/gemma-3-1b-it:free"
+const MODEL = "google/gemma-4-31b-it:free"; 
 
 export class HttpError extends Error {
   status: number;
@@ -57,76 +50,56 @@ function extractJSON(text: string): unknown {
 }
 
 export async function askJSON(prompt: string, maxTokens: number = 16000): Promise<unknown> {
-  const key = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  const key = process.env.OPENROUTER_API_KEY;
   if (!key) {
-    throw new HttpError(500, "Falta GOOGLE_API_KEY. Revisa las variables de entorno en Vercel.");
+    throw new HttpError(500, "Falta OPENROUTER_API_KEY en las variables de entorno de Vercel.");
   }
 
-  let lastError: HttpError | null = null;
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${key}`,
+      "HTTP-Referer": "https://tm-10-study-app.vercel.app", // Requerido por OpenRouter
+      "X-Title": "TM10 Study App",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: maxTokens,
+      temperature: 0.7,
+    }),
+  });
 
-  // BUCLE DE FALLBACK: Prueba cada modelo hasta que uno funcione
-  for (const model of MODELOS_DISPONIBLES) {
-    try {
-      const res = await fetch(apiUrl(model), {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-goog-api-key": key,
-        },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            maxOutputTokens: maxTokens,
-            temperature: 0.7,
-          },
-        }),
-      });
-
-      if (!res.ok) {
-        const detail = await res.text().catch(() => "");
-        console.error(`[Modelo: ${model}] Google API error`, res.status, detail);
-
-        // Si el modelo no existe, no está disponible o no tenemos acceso, probamos el siguiente
-        if (res.status === 404 || res.status === 403 || /API_KEY_INVALID|API key not valid|no longer available|not found/i.test(detail)) {
-          console.warn(`[Fallback] Modelo "${model}" no disponible. Probando siguiente...`);
-          continue; // ⬅️ Pasa al siguiente modelo de la lista
-        }
-
-        if (res.status === 429) throw new HttpError(429, "Límite de uso alcanzado. Espera un poco y reintenta.");
-        if (res.status === 401) throw new HttpError(500, "La clave de API de Google no es válida.");
-        throw new HttpError(502, "Error al hablar con la IA. Inténtalo de nuevo.");
-      }
-
-      const data = (await res.json()) as {
-        candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
-        promptFeedback?: { blockReason?: string };
-      };
-
-      if (data.promptFeedback?.blockReason) {
-        throw new HttpError(400, "La IA rechazó el contenido del tema. Prueba con otro texto.");
-      }
-
-      const parts = data.candidates?.[0]?.content?.parts ?? [];
-      const text = parts
-        .filter((p) => !p.thought)
-        .map((p) => p.text ?? "")
-        .join("");
-
-      if (!text.trim()) throw new HttpError(502, "La IA no devolvió respuesta. Inténtalo de nuevo.");
-
-      console.log(`[IA] Éxito usando modelo: ${model}`);
-      return extractJSON(text);
-    } catch (e) {
-      if (e instanceof HttpError && ![404, 403].includes(e.status)) {
-        throw e; // Si es un error grave, no seguimos probando
-      }
-      lastError = e as HttpError;
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    console.error(`[OpenRouter] Error ${res.status}:`, detail);
+    
+    if (res.status === 401 || res.status === 403) {
+      throw new HttpError(500, "La clave de OpenRouter no es válida.");
     }
+    if (res.status === 429) {
+      throw new HttpError(429, "Límite de uso alcanzado. Espera un momento.");
+    }
+    if (res.status === 404) {
+      throw new HttpError(500, `El modelo "${MODEL}" no existe en OpenRouter. Revisa el ID exacto en openrouter.ai/models`);
+    }
+    throw new HttpError(502, "Error al hablar con la IA. Inténtalo de nuevo.");
   }
 
-  throw new HttpError(
-    500,
-    `Ningún modelo de IA está disponible. Revisa tu API Key en Vercel.`
-  );
+  const data = await res.json() as {
+    choices?: { message?: { content?: string } }[];
+    error?: { message?: string };
+  };
+
+  if (data.error?.message) {
+    throw new HttpError(502, `Error de OpenRouter: ${data.error.message}`);
+  }
+
+  const text = data.choices?.[0]?.message?.content ?? "";
+  if (!text.trim()) {
+    throw new HttpError(502, "La IA no devolvió respuesta. Inténtalo de nuevo.");
+  }
+
+  return extractJSON(text);
 }
