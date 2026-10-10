@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
-// Modelos que SÍ son gratuitos y están disponibles actualmente
+// Modelos gratuitos y disponibles en 2026 (ordenados por preferencia)
 const MODELOS_DISPONIBLES = [
-  "gemini-1.5-flash",      // El más estable y ampliamente disponible en capa gratuita
-  "gemini-3.8-flash",      // El Flash más reciente disponible en capa gratuita
-  "gemini-3.5-flash-lite", // Alternativa ligera gratuita
-  "gemini-1.5-pro"         // Como último recurso
+  "gemini-3.8-flash",      // El más reciente, estable y recomendado por Google
+  "gemini-3.5-flash-lite", // Alternativa ligera y rápida
+  "gemini-3.1-flash-lite", // Otra opción ligera gratuita
+  "gemini-2.5-flash"       // Último recurso
 ];
 
 const apiUrl = (model: string) =>
@@ -64,6 +64,7 @@ export async function askJSON(prompt: string, maxTokens: number = 16000): Promis
 
   let lastError: HttpError | null = null;
 
+  // BUCLE DE FALLBACK: Prueba cada modelo hasta que uno funcione
   for (const model of MODELOS_DISPONIBLES) {
     try {
       const res = await fetch(apiUrl(model), {
@@ -86,10 +87,10 @@ export async function askJSON(prompt: string, maxTokens: number = 16000): Promis
         const detail = await res.text().catch(() => "");
         console.error(`[Modelo: ${model}] Google API error`, res.status, detail);
 
-        // Si el modelo no existe o no tenemos acceso, probamos el siguiente
-        if (res.status === 404 || res.status === 403 || /API_KEY_INVALID|API key not valid|no longer available/i.test(detail)) {
+        // Si el modelo no existe, no está disponible o no tenemos acceso, probamos el siguiente
+        if (res.status === 404 || res.status === 403 || /API_KEY_INVALID|API key not valid|no longer available|not found/i.test(detail)) {
           console.warn(`[Fallback] Modelo "${model}" no disponible. Probando siguiente...`);
-          continue;
+          continue; // ⬅️ Pasa al siguiente modelo de la lista
         }
 
         if (res.status === 429) throw new HttpError(429, "Límite de uso alcanzado. Espera un poco y reintenta.");
@@ -118,7 +119,7 @@ export async function askJSON(prompt: string, maxTokens: number = 16000): Promis
       return extractJSON(text);
     } catch (e) {
       if (e instanceof HttpError && ![404, 403].includes(e.status)) {
-        throw e;
+        throw e; // Si es un error grave, no seguimos probando
       }
       lastError = e as HttpError;
     }
